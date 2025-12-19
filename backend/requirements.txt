@@ -5,3 +5,5 @@ yfinance
 pydantic
 python-multipart
 requests
+python-bcb
+pandas

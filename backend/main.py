@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from supabase import create_client, Client # Importando o conector
 import yfinance as yf
+import yfinance as yf
+from datetime import datetime, timedelta
+import pandas as pd
+from bcb import sgs # Para pegar o CDI
 
 app = FastAPI()
 
@@ -155,3 +159,90 @@ def atualizar_transacao(id_transacao: int, dados: AtualizacaoTransacao):
         return {"mensagem": "Atualizado com sucesso!"}
     except Exception as e:
         return {"erro": "Erro ao atualizar", "detalhes": str(e)}
+        # 👇 ROTA DE ELITE: HISTÓRICO COMPARATIVO 👇
+@app.get("/historico")
+def obter_historico():
+    try:
+        # 1. Pega sua carteira atual
+        response = supabase.table("transacoes").select("*").execute()
+        transacoes = response.data
+        if not transacoes:
+            return []
+
+        # 2. Define o período (Ex: Últimos 30 dias)
+        dias_atras = 30
+        data_inicio = (datetime.now() - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
+        tickers = [t['ticker'] + ".SA" for t in transacoes] # Adiciona .SA para o Yahoo
+        
+        # 3. Baixa histórico das SUAS ações + IBOVESPA (^BVSP)
+        dados_mercado = yf.download(tickers + ['^BVSP'], start=data_inicio, progress=False)['Close']
+        
+        # 4. Baixa histórico do CDI (Código 11 do Banco Central)
+        cdi = sgs.get({'CDI': 12}, last=dias_atras) # Taxa diária %
+
+        # 5. Processa dia a dia (Matemática Financeira)
+        historico_final = []
+        
+        # Normaliza as datas para iterar
+        datas = dados_mercado.index
+        
+        # Valor inicial base para índices (base 100 para comparação visual)
+        base_cdi = 100
+        base_ibov = 100
+        base_carteira = 100
+        
+        primeiro_dia = True
+
+        for data in datas:
+            data_str = data.strftime('%d/%m')
+            
+            # --- A) CALCULA SUA CARTEIRA ---
+            valor_dia_carteira = 0
+            for t in transacoes:
+                ticker_sa = t['ticker'] + ".SA"
+                qtd = t['quantidade']
+                # Se tiver cotação naquele dia, soma. Se não (feriado), pega anterior
+                if ticker_sa in dados_mercado.columns:
+                    preco = dados_mercado.loc[data, ticker_sa]
+                    if pd.notna(preco):
+                        valor_dia_carteira += preco * qtd
+            
+            # --- B) CALCULA IBOVESPA (Índice Base 100) ---
+            val_ibov = dados_mercado.loc[data, '^BVSP'] if '^BVSP' in dados_mercado.columns else None
+            
+            # --- C) CALCULA CDI (Acumulado) ---
+            # CDI do BC vem como taxa diária (ex: 0.04%). Precisamos compor.
+            taxa_cdi_dia = 0
+            # Tenta achar a taxa CDI para a data (convertendo formato se necessário)
+            try:
+                # Ajuste técnico simples para datas
+                taxa_cdi_dia = cdi.loc[data.strftime('%Y-%m-%d')]['CDI']
+            except:
+                pass
+            
+            # Lógica de Indexação (Transformar tudo em %)
+            if primeiro_dia:
+                val_ref_carteira = valor_dia_carteira
+                val_ref_ibov = val_ibov
+                primeiro_dia = False
+            
+            # Variação Percentual Acumulada
+            rent_carteira = ((valor_dia_carteira / val_ref_carteira) - 1) * 100 if val_ref_carteira else 0
+            rent_ibov = ((val_ibov / val_ref_ibov) - 1) * 100 if val_ref_ibov and val_ref_ibov else 0
+            
+            # CDI acumula juros sobre juros
+            base_cdi = base_cdi * (1 + (taxa_cdi_dia/100))
+            rent_cdi = base_cdi - 100
+
+            historico_final.append({
+                "data": data_str,
+                "carteira": round(rent_carteira, 2),
+                "ibovespa": round(rent_ibov, 2),
+                "cdi": round(rent_cdi, 2)
+            })
+            
+        return historico_final
+
+    except Exception as e:
+        print(f"Erro: {e}")
+        return {"erro": str(e)}

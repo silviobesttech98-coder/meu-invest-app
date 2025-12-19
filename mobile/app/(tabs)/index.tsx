@@ -11,7 +11,7 @@ export default function HomeScreen() {
   
   const router = useRouter(); 
 
-  // 👇 SEU SERVIDOR NA NUVEM 👇
+  // 👇 SEU SERVIDOR NA NUVEM
   const BASE_URL = "https://meu-invest-app.onrender.com"; 
 
   const carregarDados = async () => {
@@ -102,14 +102,11 @@ export default function HomeScreen() {
           data={saldo}
           keyExtractor={(item) => String(item.id)} 
           renderItem={({ item }) => {
-            // Lógica do Lucro em Reais (R$)
             const precoAtual = item.preco_atual || item.preco;
             const lucroReais = (precoAtual - item.preco) * item.quantidade;
             const isLucro = lucroReais >= 0;
             const corLucro = isLucro ? '#00ff00' : '#ff4444'; 
             const sinal = isLucro ? '+' : ''; 
-
-            // 🧠 Lógica da Porcentagem (%)
             const rentabilidade = item.preco > 0 
               ? ((precoAtual - item.preco) / item.preco) * 100 
               : 0;
@@ -122,47 +119,42 @@ export default function HomeScreen() {
                 <View style={styles.card}>
                   <View>
                     <Text style={styles.ativo}>{item.ticker}</Text>
-                    <Text style={styles.detalhe}>
-                        {item.quantidade} un. • Médio: {formatarMoeda(item.preco)}
-                    </Text>
-                    {/* Preço Atual menorzinho */}
-                    <Text style={{color: '#888', fontSize: 11, marginTop: 2}}>
-                        Hoje: {formatarMoeda(precoAtual)}
-                    </Text>
+                    <Text style={styles.detalhe}>{item.quantidade} un. • Médio: {formatarMoeda(item.preco)}</Text>
+                    <Text style={{color: '#888', fontSize: 11, marginTop: 2}}>Hoje: {formatarMoeda(precoAtual)}</Text>
                   </View>
                   
                   <View style={{alignItems: 'flex-end'}}>
-                    {/* Valor Total na Carteira */}
-                    <Text style={styles.valorItem}>
-                        {formatarMoeda(precoAtual * item.quantidade)}
-                    </Text>
+                    <Text style={styles.valorItem}>{formatarMoeda(precoAtual * item.quantidade)}</Text>
                     
-                    {/* 🟢 LINHA DO LUCRO: R$ e % JUNTOS */}
                     <View style={{flexDirection: 'row', alignItems: 'center'}}>
                         <Text style={{color: corLucro, fontSize: 13, fontWeight: 'bold'}}>
                             {sinal}{formatarMoeda(lucroReais)}
                         </Text>
-                        
-                        {/* A "Tag" de Porcentagem */}
-                        <View style={{
-                            backgroundColor: isLucro ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 68, 68, 0.1)',
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: 4,
-                            marginLeft: 6
-                        }}>
-                            <Text style={{color: corLucro, fontSize: 11, fontWeight: 'bold'}}>
-                                {sinal}{rentabilidade.toFixed(2)}%
-                            </Text>
+                        <View style={{backgroundColor: isLucro ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 68, 68, 0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 6}}>
+                            <Text style={{color: corLucro, fontSize: 11, fontWeight: 'bold'}}>{sinal}{rentabilidade.toFixed(2)}%</Text>
                         </View>
                     </View>
                     
-                    <TouchableOpacity onPress={(e) => {
-                        e.stopPropagation();
-                        deletarItem(item.id, item.ticker);
-                    }} style={{marginTop: 8}}>
-                        <Ionicons name="trash-outline" size={18} color="#666" />
-                    </TouchableOpacity>
+                    {/* 👇 BOTÕES DE AÇÃO: EDITAR E EXCLUIR 👇 */}
+                    <View style={{flexDirection: 'row', marginTop: 10}}>
+                        {/* Botão Editar (Lápis) */}
+                        <TouchableOpacity onPress={(e) => {
+                            e.stopPropagation();
+                            // Vai para a tela de editar com o ID da transação
+                            router.push(`/editar/${item.id}`);
+                        }} style={{marginRight: 15}}>
+                            <Ionicons name="pencil" size={20} color="#00B8FF" />
+                        </TouchableOpacity>
+
+                        {/* Botão Excluir (Lixeira) */}
+                        <TouchableOpacity onPress={(e) => {
+                            e.stopPropagation();
+                            deletarItem(item.id, item.ticker);
+                        }}>
+                            <Ionicons name="trash-outline" size={20} color="#666" />
+                        </TouchableOpacity>
+                    </View>
+
                   </View>
                 </View>
               </TouchableOpacity>
@@ -177,48 +169,12 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#121212',
-    paddingTop: 50,
-    paddingHorizontal: 10,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-    paddingBottom: 20
-  },
-  labelHeader: {
-    color: '#aaa',
-    fontSize: 14,
-    textTransform: 'uppercase',
-  },
-  valorTotal: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
-    textShadowColor: 'rgba(0, 255, 0, 0.5)',
-    textShadowOffset: {width: 0, height: 0},
-    textShadowRadius: 10
-  },
-  subtitulo: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    marginLeft: 10
-  },
-  card: {
-    backgroundColor: '#1e1e1e',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#121212', paddingTop: 50, paddingHorizontal: 10 },
+  header: { alignItems: 'center', marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#333', paddingBottom: 20 },
+  labelHeader: { color: '#aaa', fontSize: 14, textTransform: 'uppercase' },
+  valorTotal: { color: '#fff', fontSize: 32, fontWeight: 'bold', textShadowColor: 'rgba(0, 255, 0, 0.5)', textShadowOffset: {width: 0, height: 0}, textShadowRadius: 10 },
+  subtitulo: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 10, marginLeft: 10 },
+  card: { backgroundColor: '#1e1e1e', padding: 15, borderRadius: 12, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   ativo: { color: 'white', fontSize: 18, fontWeight: 'bold' },
   detalhe: { color: '#888', fontSize: 12 },
   valorItem: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
