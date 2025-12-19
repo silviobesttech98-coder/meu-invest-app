@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity, Alert, Dimensions } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router'; // <--- Importamos useRouter
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { PieChart } from "react-native-chart-kit";
 
@@ -9,10 +9,10 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [patrimonioTotal, setPatrimonioTotal] = useState(0);
   
-  const router = useRouter(); // <--- Instanciamos o roteador
+  const router = useRouter(); 
 
-  // 👇 CONFIRA SEU IP 👇
-  const BASE_URL = "http://192.168.1.124:8000"; 
+  // 👇 SEU SERVIDOR NA NUVEM 👇
+  const BASE_URL = "https://meu-invest-app.onrender.com"; 
 
   const carregarDados = async () => {
     setLoading(true);
@@ -102,36 +102,66 @@ export default function HomeScreen() {
           data={saldo}
           keyExtractor={(item) => String(item.id)} 
           renderItem={({ item }) => {
-            const isLucro = item.lucro_total >= 0;
+            // Lógica do Lucro em Reais (R$)
+            const precoAtual = item.preco_atual || item.preco;
+            const lucroReais = (precoAtual - item.preco) * item.quantidade;
+            const isLucro = lucroReais >= 0;
             const corLucro = isLucro ? '#00ff00' : '#ff4444'; 
             const sinal = isLucro ? '+' : ''; 
 
+            // 🧠 Lógica da Porcentagem (%)
+            const rentabilidade = item.preco > 0 
+              ? ((precoAtual - item.preco) / item.preco) * 100 
+              : 0;
+
             return (
-              // 🔽 AGORA O CARD É CLICÁVEL 🔽
               <TouchableOpacity 
                 activeOpacity={0.7}
-                onPress={() => router.push(`/detalhes/${item.ticker}`)} // Navega para a nova tela
+                onPress={() => router.push(`/detalhes/${item.ticker}`)}
               >
                 <View style={styles.card}>
                   <View>
                     <Text style={styles.ativo}>{item.ticker}</Text>
-                    <Text style={styles.detalhe}>{item.quantidade} un. • Médio: {formatarMoeda(item.preco)}</Text>
+                    <Text style={styles.detalhe}>
+                        {item.quantidade} un. • Médio: {formatarMoeda(item.preco)}
+                    </Text>
+                    {/* Preço Atual menorzinho */}
+                    <Text style={{color: '#888', fontSize: 11, marginTop: 2}}>
+                        Hoje: {formatarMoeda(precoAtual)}
+                    </Text>
                   </View>
                   
                   <View style={{alignItems: 'flex-end'}}>
+                    {/* Valor Total na Carteira */}
                     <Text style={styles.valorItem}>
-                        {formatarMoeda((item.preco_atual || item.preco) * item.quantidade)}
-                    </Text>
-                    <Text style={{color: corLucro, fontSize: 14, fontWeight: 'bold'}}>
-                        {sinal}{formatarMoeda(item.lucro_total || 0)}
+                        {formatarMoeda(precoAtual * item.quantidade)}
                     </Text>
                     
-                    {/* Botão de Lixeira (com stopPropagation para não abrir o detalhe ao clicar na lixeira) */}
+                    {/* 🟢 LINHA DO LUCRO: R$ e % JUNTOS */}
+                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <Text style={{color: corLucro, fontSize: 13, fontWeight: 'bold'}}>
+                            {sinal}{formatarMoeda(lucroReais)}
+                        </Text>
+                        
+                        {/* A "Tag" de Porcentagem */}
+                        <View style={{
+                            backgroundColor: isLucro ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 68, 68, 0.1)',
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 4,
+                            marginLeft: 6
+                        }}>
+                            <Text style={{color: corLucro, fontSize: 11, fontWeight: 'bold'}}>
+                                {sinal}{rentabilidade.toFixed(2)}%
+                            </Text>
+                        </View>
+                    </View>
+                    
                     <TouchableOpacity onPress={(e) => {
-                        e.stopPropagation(); // Impede o clique de subir para o card
+                        e.stopPropagation();
                         deletarItem(item.id, item.ticker);
-                    }} style={{marginTop: 5}}>
-                        <Ionicons name="trash-outline" size={20} color="#ff4444" />
+                    }} style={{marginTop: 8}}>
+                        <Ionicons name="trash-outline" size={18} color="#666" />
                     </TouchableOpacity>
                   </View>
                 </View>

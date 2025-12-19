@@ -8,7 +8,7 @@ export default function InvestirScreen() {
   const [loading, setLoading] = useState(false);
 
   // 👇 COLOQUE SEU IP AQUI DE NOVO 👇
-  const API_URL = "http://192.168.1.124:8000/comprar";
+  const API_URL = "https://meu-invest-app.onrender.com/comprar";
 
   async function handleInvestir() {
     if (!ticker || !preco || !quantidade) {

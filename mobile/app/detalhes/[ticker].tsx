@@ -13,7 +13,7 @@ export default function DetalhesScreen() {
   const [loading, setLoading] = useState(true);
 
   // 👇 SEU IP AQUI 👇
-  const BASE_URL = "http://192.168.1.124:8000";
+  const BASE_URL = "https://meu-invest-app.onrender.com";
 
   useEffect(() => {
     fetch(`${BASE_URL}/historico/${ticker}`)

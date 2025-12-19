@@ -129,3 +129,29 @@ def historico_mensal(ticker: str):
         }
     except Exception as e:
         return {"erro": str(e)}
+        # 👇 COLE ISSO NO FINAL DO ARQUIVO main.py 👇
+
+# Classe para validar os dados da edição
+class AtualizacaoTransacao(BaseModel):
+    novo_preco: float | None = None
+    nova_quantidade: int | None = None
+
+# Rota para EDITAR (Atualizar) uma transação
+@app.put("/transacoes/{id_transacao}")
+def atualizar_transacao(id_transacao: int, dados: AtualizacaoTransacao):
+    try:
+        update_data = {}
+        # Só atualiza o que foi enviado (se enviou só preço, muda só preço)
+        if dados.novo_preco is not None:
+            update_data['preco'] = dados.novo_preco
+        if dados.nova_quantidade is not None:
+            update_data['quantidade'] = dados.nova_quantidade
+            
+        if not update_data:
+            return {"erro": "Nenhum dado para atualizar"}
+
+        # Manda o Supabase atualizar
+        supabase.table("transacoes").update(update_data).eq("id", id_transacao).execute()
+        return {"mensagem": "Atualizado com sucesso!"}
+    except Exception as e:
+        return {"erro": "Erro ao atualizar", "detalhes": str(e)}
