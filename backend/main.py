@@ -4,7 +4,7 @@ from supabase import create_client, Client
 import yfinance as yf
 from datetime import datetime, timedelta
 import pandas as pd
-from bcb import sgs # Para pegar o CDI
+from bcb import sgs 
 
 app = FastAPI()
 
@@ -32,21 +32,17 @@ def home():
 
 @app.get("/minha-carteira")
 def listar_carteira():
-    # 1. Pega os dados brutos do Supabase
     resposta = supabase.table("transacoes").select("*").execute()
     carteira = resposta.data
     
-    # 2. Vamos enriquecer cada item com o preço atual
     for acao in carteira:
-        ticker = acao['ticker'].strip() # Remove espaços vazios acidentais
-        # Adiciona o .SA se não tiver
+        ticker = acao['ticker'].strip()
         if not ticker.endswith(".SA"):
             ticker_yahoo = f"{ticker}.SA"
         else:
             ticker_yahoo = ticker
             
         try:
-            # Busca a cotação online
             dados_mercado = yf.Ticker(ticker_yahoo)
             historico = dados_mercado.history(period="1d")
             
@@ -59,7 +55,6 @@ def listar_carteira():
         except Exception:
             acao['preco_atual'] = acao['preco']
             
-        # 3. Calcula o lucro/prejuízo por ação
         acao['lucro_total'] = (acao['preco_atual'] - acao['preco']) * acao['quantidade']
         
     return carteira
@@ -67,7 +62,7 @@ def listar_carteira():
 @app.post("/comprar")
 def comprar_acao(compra: Compra):
     nova_transacao = {
-        "ticker": compra.ticker.upper().strip(), # Salva sempre maiúsculo e sem espaço
+        "ticker": compra.ticker.upper().strip(),
         "preco": compra.preco,
         "quantidade": compra.quantidade,
         "tipo": compra.tipo
@@ -112,7 +107,6 @@ def atualizar_transacao(id_transacao: int, dados: AtualizacaoTransacao):
     except Exception as e:
         return {"erro": "Erro ao atualizar", "detalhes": str(e)}
 
-# Rota individual (Detalhes do App)
 @app.get("/historico/{ticker}")
 def historico_individual(ticker: str):
     try:
@@ -131,93 +125,67 @@ def historico_individual(ticker: str):
         precos = historico['Close'].tolist()
         datas = [data.strftime("%d/%m") for data in historico.index]
 
-        return {
-            "labels": datas[::3], 
-            "data": precos[::3]
-        }
+        return {"labels": datas[::3], "data": precos[::3]}
     except Exception as e:
         return {"erro": str(e)}
 
-# 👇 ROTA DO GRÁFICO COMPARATIVO (CORRIGIDA E BLINDADA) 👇
 @app.get("/historico")
 def obter_historico_carteira():
     try:
-        # 1. Pega sua carteira
         response = supabase.table("transacoes").select("*").execute()
         transacoes = response.data
         if not transacoes:
             return []
 
-        # 2. FIX: Reduzido para 20 dias (limite atual da API pública do BC)
         dias_atras = 20
         data_inicio = (datetime.now() - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
-        
-        # 3. FIX: .strip() para remover espaços vazios que quebram o Yahoo
         tickers = [t['ticker'].strip() + ".SA" for t in transacoes] 
         
-        # 4. Busca Yahoo com proteção
         try:
-            # Baixa dados de fechamento ('Close')
             dados_mercado = yf.download(tickers + ['^BVSP'], start=data_inicio, progress=False)['Close']
-        except Exception as e:
-            print(f"Erro Yahoo: {e}")
+        except Exception:
             return [] 
 
-        # 5. Busca CDI com proteção
         try:
             cdi = sgs.get({'CDI': 12}, last=dias_atras)
-        except Exception as e:
-            print(f"Erro BCB: {e}")
-            cdi = pd.DataFrame() # Cria vazio se der erro pra não travar tudo
+        except Exception:
+            cdi = pd.DataFrame() 
 
         if dados_mercado.empty:
             return []
 
-        # 6. Processamento Matemático
         historico_final = []
         datas = dados_mercado.index
         base_cdi = 100
-        
         primeiro_dia = True
         val_ref_carteira = 1
         val_ref_ibov = 1
 
         for data in datas:
             data_str = data.strftime('%d/%m')
-            
-            # --- Carteira ---
             valor_dia_carteira = 0
             for t in transacoes:
                 ticker_limpo = t['ticker'].strip() + ".SA"
                 qtd = t['quantidade']
-                
-                # Verifica se a ação existe nas colunas baixadas pelo Yahoo
                 if ticker_limpo in dados_mercado.columns:
                     preco = dados_mercado.loc[data, ticker_limpo]
                     if pd.notna(preco):
                         valor_dia_carteira += preco * qtd
             
-            # --- Ibovespa ---
             val_ibov = dados_mercado.loc[data, '^BVSP'] if '^BVSP' in dados_mercado.columns else 0
-            
-            # --- CDI ---
             taxa_cdi_dia = 0
             try:
                 taxa_cdi_dia = cdi.loc[data.strftime('%Y-%m-%d')]['CDI']
             except:
-                pass # Se não tiver CDI no dia (feriado/fds), segue o baile
+                pass 
             
-            # Define o valor inicial (Marco Zero)
             if primeiro_dia:
                 val_ref_carteira = valor_dia_carteira if valor_dia_carteira > 0 else 1
                 val_ref_ibov = val_ibov if val_ibov > 0 else 1
                 primeiro_dia = False
             
-            # Cálculos de Rentabilidade (%)
             rent_carteira = ((valor_dia_carteira / val_ref_carteira) - 1) * 100
             rent_ibov = ((val_ibov / val_ref_ibov) - 1) * 100
-            
-            # CDI é juros compostos
             base_cdi = base_cdi * (1 + (taxa_cdi_dia/100))
             rent_cdi = base_cdi - 100
 
@@ -231,5 +199,59 @@ def obter_historico_carteira():
         return historico_final
 
     except Exception as e:
-        print(f"Erro Geral: {e}")
+        return {"erro": str(e)}
+
+# 👇👇👇 ROTA NOVA: MÁQUINA DE DIVIDENDOS 👇👇👇
+@app.get("/proventos")
+def obter_proventos():
+    try:
+        response = supabase.table("transacoes").select("*").execute()
+        carteira = response.data
+        if not carteira:
+            return {"labels": [], "data": []}
+
+        # Dicionário para somar dividendos por mês (Chave: "2025-01", Valor: 50.00)
+        proventos_por_mes = {}
+
+        for acao in carteira:
+            ticker = acao['ticker'].strip()
+            qtd = acao['quantidade']
+            if not ticker.endswith(".SA"):
+                ticker = f"{ticker}.SA"
+
+            try:
+                # Baixa dividendos dos últimos 12 meses
+                ticker_obj = yf.Ticker(ticker)
+                divs = ticker_obj.dividends
+                
+                # Filtra último ano
+                data_limite = datetime.now() - timedelta(days=365)
+                # O índice do Pandas já é data, então filtramos direto
+                divs_ano = divs[divs.index >= data_limite.replace(tzinfo=divs.index.dtype.tz)]
+
+                for data, valor in divs_ano.items():
+                    # Formata a data para "Mês/Ano" (ex: 12/23)
+                    mes_chave = data.strftime("%m/%y")
+                    valor_total_recebido = valor * qtd
+                    
+                    if mes_chave in proventos_por_mes:
+                        proventos_por_mes[mes_chave] += valor_total_recebido
+                    else:
+                        proventos_por_mes[mes_chave] = valor_total_recebido
+            
+            except Exception as e:
+                print(f"Erro ao pegar proventos de {ticker}: {e}")
+                continue
+
+        # Ordena cronologicamente (Pandas ajuda, mas vamos simplificar aqui)
+        # Transformar em listas para o Gráfico
+        # Ordenamos pelo ano/mês "cru" para ficar na ordem certa
+        sorted_keys = sorted(proventos_por_mes.keys(), key=lambda x: datetime.strptime(x, "%m/%y"))
+        
+        labels = sorted_keys
+        data = [round(proventos_por_mes[k], 2) for k in sorted_keys]
+
+        return {"labels": labels, "data": data}
+
+    except Exception as e:
         return {"erro": str(e)}
